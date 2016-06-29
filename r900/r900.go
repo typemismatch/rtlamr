@@ -73,8 +73,8 @@ func NewParser(symbolLength, decimation int) parse.Parser {
 	return p
 }
 
-func (p Parser) Dec() decode.Decoder {
-	return p.Decoder
+func (p *Parser) Dec() *decode.Decoder {
+	return &p.Decoder
 }
 
 func (p *Parser) Cfg() *decode.PacketConfig {
@@ -238,6 +238,8 @@ func (p Parser) Parse(indices []int) (msgs []parse.Message) {
 		r900.LeakNow = uint8(leaknow)
 		copy(r900.checksum[:], symbols[16:])
 
+		r900.idx = preambleIdx
+
 		msgs = append(msgs, r900)
 	}
 
@@ -245,6 +247,8 @@ func (p Parser) Parse(indices []int) (msgs []parse.Message) {
 }
 
 type R900 struct {
+	idx int
+
 	ID          uint32 `xml:",attr"` // 32 bits
 	Unkn1       uint8  `xml:",attr"` // 8 bits
 	NoUse       uint8  `xml:",attr"` // 6 bits, day bins of no use
@@ -254,6 +258,10 @@ type R900 struct {
 	Leak        uint8  `xml:",attr"` // 4 bits, day bins of leak
 	LeakNow     uint8  `xml:",attr"` // 2 bits, leak past 24h hi/lo
 	checksum    [5]byte
+}
+
+func (r900 R900) Idx() int {
+	return r900.idx
 }
 
 func (r900 R900) MsgType() string {

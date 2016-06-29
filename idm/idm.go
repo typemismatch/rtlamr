@@ -47,8 +47,8 @@ type Parser struct {
 	crc.CRC
 }
 
-func (p Parser) Dec() decode.Decoder {
-	return p.Decoder
+func (p *Parser) Dec() *decode.Decoder {
+	return &p.Decoder
 }
 
 func (p *Parser) Cfg() *decode.PacketConfig {
@@ -65,7 +65,7 @@ func NewParser(symbolLength, decimation int) (p parse.Parser) {
 func (p Parser) Parse(indices []int) (msgs []parse.Message) {
 	seen := make(map[string]bool)
 
-	for _, pkt := range p.Decoder.Slice(indices) {
+	for idx, pkt := range p.Decoder.Slice(indices) {
 		s := string(pkt)
 		if seen[s] {
 			continue
@@ -85,6 +85,7 @@ func (p Parser) Parse(indices []int) (msgs []parse.Message) {
 		}
 
 		idm := NewIDM(data)
+		idm.idx = indices[idx]
 
 		// If the meter id is 0, bail.
 		if idm.ERTSerialNumber == 0 {
@@ -99,6 +100,8 @@ func (p Parser) Parse(indices []int) (msgs []parse.Message) {
 
 // Standard Consumption Message
 type IDM struct {
+	idx int
+
 	Preamble                         uint32 // Training and Frame sync.
 	PacketTypeID                     uint8
 	PacketLength                     uint8 // Packet Length MSB
@@ -154,6 +157,10 @@ func (interval Interval) Record() (r []string) {
 		r = append(r, strconv.FormatUint(uint64(val), 10))
 	}
 	return
+}
+
+func (idm IDM) Idx() int {
+	return idm.idx
 }
 
 func (idm IDM) MsgType() string {

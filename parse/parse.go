@@ -2,6 +2,7 @@ package parse
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -72,13 +73,14 @@ func NewDataFromBits(data string) (d Data) {
 
 type Parser interface {
 	Parse([]int) []Message
-	Dec() decode.Decoder
+	Dec() *decode.Decoder
 	Cfg() *decode.PacketConfig
 	Log()
 }
 
 type Message interface {
 	csv.Recorder
+	Idx() int
 	MsgType() string
 	MeterID() uint32
 	MeterType() uint8
@@ -86,28 +88,44 @@ type Message interface {
 }
 
 type LogMessage struct {
-	Time   time.Time
+	Time   Timestamp
 	Offset int64
 	Length int
+	RSSI   RSSI `json:",omitempty" xml:",omitempty"`
 	Message
-}
-
-func (msg LogMessage) String() string {
-	return fmt.Sprintf("{Time:%s Offset:%d Length:%d %s:%s}",
-		msg.Time.Format(TimeFormat), msg.Offset, msg.Length, msg.MsgType(), msg.Message,
-	)
-}
-
-func (msg LogMessage) StringNoOffset() string {
-	return fmt.Sprintf("{Time:%s %s:%s}", msg.Time.Format(TimeFormat), msg.MsgType(), msg.Message)
 }
 
 func (msg LogMessage) Record() (r []string) {
 	r = append(r, msg.Time.Format(time.RFC3339Nano))
 	r = append(r, strconv.FormatInt(msg.Offset, 10))
 	r = append(r, strconv.FormatInt(int64(msg.Length), 10))
+	r = append(r, msg.RSSI.String())
 	r = append(r, msg.Message.Record()...)
 	return r
+}
+
+type Timestamp struct {
+	time.Time
+}
+
+func (ts Timestamp) String() string {
+	return ts.Format(time.RFC3339Nano)
+}
+
+type RSSI float64
+
+func (rssi RSSI) String() string {
+	return strconv.FormatFloat(float64(rssi), 'f', 3, 64)
+}
+
+// 20 * Log10(2^8)
+const QuantNoise8bit = -48.1647993062
+
+// JSON doesn't support Inf and XML just renders it as Inf, so lets sanitize it.
+func (rssi *RSSI) Sanitize() {
+	if math.IsInf(float64(*rssi), -1) {
+		*rssi = RSSI(QuantNoise8bit)
+	}
 }
 
 type FilterChain []MessageFilter

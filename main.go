@@ -53,6 +53,10 @@ func (rcvr *Receiver) NewReceiver() {
 		log.Fatal(err)
 	}
 
+	if *rssi {
+		rcvr.p.Dec().EnableRSSI()
+	}
+
 	// Connect to rtl_tcp server.
 	if err := rcvr.Connect(nil); err != nil {
 		log.Fatal(err)
@@ -160,10 +164,14 @@ func (rcvr *Receiver) Run() {
 				}
 
 				var msg parse.LogMessage
-				msg.Time = time.Now()
+				msg.Time = parse.Timestamp{time.Now()}
 				msg.Offset, _ = sampleFile.Seek(0, os.SEEK_CUR)
 				msg.Length = sampleBuf.Len()
 				msg.Message = pkt
+				if *rssi {
+					msg.RSSI = parse.RSSI(rcvr.p.Dec().RSSI(msg.Idx()))
+					msg.RSSI.Sanitize()
+				}
 
 				err = encoder.Encode(msg)
 				if err != nil {

@@ -110,6 +110,9 @@ type Decoder struct {
 	preambleFinder *byteFinder
 
 	pkt []byte
+
+	rssi      bool
+	filterBuf []float64
 }
 
 // Create a new decoder with the given packet configuration.
@@ -178,8 +181,13 @@ func (d Decoder) Decode(input []byte) []int {
 	// Perform matched filter on new block.
 	d.Filter(d.Signal, d.Filtered)
 
+	if d.rssi {
+		copy(d.filterBuf, d.filterBuf[d.DecCfg.PacketLength:])
+		copy(d.filterBuf[d.DecCfg.PacketLength:], d.Filtered)
+	}
+
 	// Perform bit-decision on new block.
-	Quantize(d.Filtered, d.Quantized[d.DecCfg.PacketLength-d.DecCfg.SymbolLength2:])
+	Quantize(d.Filtered, d.Quantized[len(d.Quantized)-d.DecCfg.BlockSize-d.DecCfg.SymbolLength2:])
 
 	// Pack the quantized signal into slices for searching.
 	d.Transpose(d.Quantized)
@@ -321,6 +329,34 @@ func (d Decoder) Slice(indices []int) (pkts [][]byte) {
 	}
 
 	return
+}
+
+func (d *Decoder) EnableRSSI() {
+	d.rssi = true
+	d.filterBuf = make([]float64, d.DecCfg.BufferLength)
+}
+
+func (d Decoder) RSSI(preambleIdx int) float64 {
+	preambleIdx /= d.Decimation
+
+	max := -math.MaxFloat64
+	argmax := preambleIdx
+	for idx := preambleIdx + d.DecCfg.SymbolLength>>1; idx < preambleIdx+d.DecCfg.SymbolLength*3; idx++ {
+		val := d.filterBuf[idx]
+		if max < val {
+			argmax = idx
+			max = val
+		}
+	}
+
+	var rssi float64
+	for symbolIdx := 0; symbolIdx < d.Cfg.PreambleSymbols; symbolIdx++ {
+		rssi += math.Abs(d.filterBuf[argmax+symbolIdx*d.DecCfg.SymbolLength2])
+	}
+
+	// Normally for dB this would be 20 log10(something).
+	// However, in MagLUT we don't Sqrt the result so this is 10 * log10.
+	return 10 * math.Log10(rssi/float64(d.Cfg.SymbolLength*d.Cfg.PreambleSymbols))
 }
 
 func NextPowerOf2(v int) int {

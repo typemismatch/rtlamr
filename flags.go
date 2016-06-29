@@ -43,6 +43,7 @@ var msgType = flag.String("msgtype", "scm", "message type to receive: scm, scm+,
 var symbolLength = flag.Int("symbollength", 72, "symbol length in samples")
 
 var decimation = flag.Int("decimation", 1, "integer decimation factor, keep every nth sample")
+var rssi = flag.Bool("rssi", false, "report preamble received signal strength")
 
 var timeLimit = flag.Duration("duration", 0, "time to run for, 0 for infinite, ex. 1h5m10s")
 var meterID MeterIDFilter
@@ -83,6 +84,7 @@ func RegisterFlags() {
 		"cpuprofile":   true,
 		"fastmag":      true,
 		"version":      true,
+		"rssi":         true,
 	}
 
 	printDefaults := func(validFlags map[string]bool, inclusion bool) {
@@ -215,10 +217,6 @@ type PlainEncoder struct {
 }
 
 func (pe PlainEncoder) Encode(msg interface{}) (err error) {
-	if pe.sampleFilename == os.DevNull {
-		_, err = fmt.Fprintln(pe.logFile, msg.(parse.LogMessage).StringNoOffset())
-	} else {
-		_, err = fmt.Fprintln(pe.logFile, msg.(parse.LogMessage))
-	}
+	_, err = fmt.Fprintf(pe.logFile, "%+v\n", msg.(parse.LogMessage))
 	return
 }

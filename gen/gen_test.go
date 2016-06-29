@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bemasher/rtlamr/crc"
 	"github.com/bemasher/rtlamr/parse"
@@ -130,7 +131,7 @@ func TestGenerateSCM(t *testing.T) {
 					manchester := lut.Encode(scm)
 					bits := Upsample(UnpackBits(manchester), 72<<1)
 
-					freq := rand.Float64() - 0.5*float64(cfg.SampleRate)
+					freq := (rand.Float64() - 0.5) * float64(cfg.SampleRate)
 					carrier := CmplxOscillatorF64(len(bits)>>1, freq, float64(cfg.SampleRate))
 
 					signalAmplitude := math.Pow(10, signalLevel/20)
@@ -190,5 +191,119 @@ func TestGenerateSCM(t *testing.T) {
 			row = append(row, strconv.Itoa(count))
 		}
 		t.Log(strings.Join(row, ","))
+	}
+}
+
+func TestSNR(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+
+	p, err := parse.NewParser("scm", 72, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := p.Cfg()
+	d := p.Dec()
+	lut := NewManchesterLUT()
+
+	// noisedB := -0.0
+	// noiseAmp := math.Pow(10, noisedB/20)
+	noiseAmp := 0.0
+
+	noise := make([]byte, cfg.BlockSize2)
+
+	signaldB := -25.0
+	signalAmp := math.Pow(10, signaldB/20)
+
+	t.Logf("Signal: %0.6f Noise: %0.6f\n", signalAmp, noiseAmp)
+
+	r, w := io.Pipe()
+
+	signalFile, err := os.Create("signal.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer signalFile.Close()
+
+	go func() {
+		scm, _ := NewRandSCM()
+
+		manchester := lut.Encode(scm)
+		bits := Upsample(UnpackBits(manchester), 72<<1)
+
+		freq := (rand.Float64() - 0.5) * float64(cfg.SampleRate)
+		carrier := CmplxOscillatorF64(len(bits)>>1, freq, float64(cfg.SampleRate))
+
+		for idx := range carrier {
+			carrier[idx] *= float64(bits[idx]) * signalAmp
+			carrier[idx] += (rand.Float64() - 0.5) * 2.0 * noiseAmp
+		}
+
+		carrierU8 := make([]byte, len(carrier))
+		F64toU8(carrier, carrierU8)
+
+		for idx := range noise {
+			noise[idx] = byte((rand.Float64()-0.5)*2.0*noiseAmp*127.5 + 127.5)
+		}
+
+		signalFile.Write(noise)
+		signalFile.Write(carrierU8)
+		signalFile.Write(noise)
+
+		w.Write(noise)
+		w.Write(carrierU8)
+		w.Write(noise)
+
+		w.Close()
+	}()
+
+	dumpFile, err := os.Create("dump.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dumpFile.Close()
+
+	block := make([]byte, cfg.BlockSize2)
+	filterBuf := make([]float64, cfg.BufferLength)
+
+	offset := 0
+	for {
+		_, err := r.Read(block)
+		indices := d.Decode(block)
+
+		copy(filterBuf, filterBuf[cfg.BlockSize:])
+		copy(filterBuf[cfg.PacketLength:], d.Filtered)
+
+		for _, msg := range p.Parse(indices) {
+			t.Logf("%d %d %+v\n", offset-cfg.PacketLength, msg.Idx(), msg)
+			binary.Write(dumpFile, binary.LittleEndian, filterBuf)
+
+			var snr float64
+
+			max := -math.MaxFloat64
+			argmax := msg.Idx()
+			for idx := msg.Idx() + cfg.SymbolLength>>1; idx < msg.Idx()+cfg.SymbolLength*3; idx++ {
+				val := filterBuf[idx]
+				if max < val {
+					argmax = idx
+					max = val
+				}
+			}
+
+			for symbolIdx := 0; symbolIdx < cfg.PreambleSymbols; symbolIdx++ {
+				val := math.Abs(filterBuf[argmax+symbolIdx*cfg.SymbolLength2])
+				t.Logf("Peak ([%2d] %4d): %0.3f\n", symbolIdx, argmax+symbolIdx*cfg.SymbolLength2, val)
+				snr += val
+			}
+
+			// t.Logf("SNR: %0.4f%% @ %d\n", 100.0*snr/float64(cfg.SymbolLength*cfg.PreambleSymbols), argmax)
+			t.Logf("SNR: %0.4fdB @ %d\n", 10*math.Log10(snr/float64(cfg.SymbolLength*cfg.PreambleSymbols)), argmax)
+		}
+
+		offset += cfg.BlockSize
+
+		if err == io.EOF {
+			break
+		}
 	}
 }

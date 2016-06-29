@@ -47,8 +47,8 @@ type Parser struct {
 	crc.CRC
 }
 
-func (p Parser) Dec() decode.Decoder {
-	return p.Decoder
+func (p *Parser) Dec() *decode.Decoder {
+	return &p.Decoder
 }
 
 func (p *Parser) Cfg() *decode.PacketConfig {
@@ -65,7 +65,7 @@ func NewParser(symbolLength, decimation int) (p parse.Parser) {
 func (p Parser) Parse(indices []int) (msgs []parse.Message) {
 	seen := make(map[string]bool)
 
-	for _, pkt := range p.Decoder.Slice(indices) {
+	for idx, pkt := range p.Decoder.Slice(indices) {
 		s := string(pkt)
 		if seen[s] {
 			continue
@@ -80,6 +80,7 @@ func (p Parser) Parse(indices []int) (msgs []parse.Message) {
 		}
 
 		scm := NewSCM(data)
+		scm.idx = indices[idx]
 
 		// If the meter id is 0, bail.
 		if scm.EndpointID == 0 {
@@ -94,6 +95,8 @@ func (p Parser) Parse(indices []int) (msgs []parse.Message) {
 
 // Standard Consumption Message Plus
 type SCM struct {
+	idx int
+
 	FrameSync    uint16 `xml:",attr"`
 	ProtocolID   uint8  `xml:",attr"`
 	EndpointType uint8  `xml:",attr"`
@@ -107,6 +110,10 @@ func NewSCM(data parse.Data) (scm SCM) {
 	binary.Read(bytes.NewReader(data.Bytes), binary.BigEndian, &scm)
 
 	return
+}
+
+func (scm SCM) Idx() int {
+	return scm.idx
 }
 
 func (scm SCM) MsgType() string {
