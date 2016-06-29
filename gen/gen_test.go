@@ -194,7 +194,7 @@ func TestGenerateSCM(t *testing.T) {
 	}
 }
 
-func TestSNR(t *testing.T) {
+func TestRSSI(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 
 	p, err := parse.NewParser("scm", 72, 1)
@@ -278,7 +278,7 @@ func TestSNR(t *testing.T) {
 			t.Logf("%d %d %+v\n", offset-cfg.PacketLength, msg.Idx(), msg)
 			binary.Write(dumpFile, binary.LittleEndian, filterBuf)
 
-			var snr float64
+			var rssi float64
 
 			max := -math.MaxFloat64
 			argmax := msg.Idx()
@@ -293,11 +293,10 @@ func TestSNR(t *testing.T) {
 			for symbolIdx := 0; symbolIdx < cfg.PreambleSymbols; symbolIdx++ {
 				val := math.Abs(filterBuf[argmax+symbolIdx*cfg.SymbolLength2])
 				t.Logf("Peak ([%2d] %4d): %0.3f\n", symbolIdx, argmax+symbolIdx*cfg.SymbolLength2, val)
-				snr += val
+				rssi += val
 			}
 
-			// t.Logf("SNR: %0.4f%% @ %d\n", 100.0*snr/float64(cfg.SymbolLength*cfg.PreambleSymbols), argmax)
-			t.Logf("SNR: %0.4fdB @ %d\n", 10*math.Log10(snr/float64(cfg.SymbolLength*cfg.PreambleSymbols)), argmax)
+			t.Logf("RSSI: %0.4f dB @ %d\n", 10*math.Log10(rssi/float64(cfg.SymbolLength*cfg.PreambleSymbols)), argmax)
 		}
 
 		offset += cfg.BlockSize
