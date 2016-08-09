@@ -107,6 +107,10 @@ type Decoder struct {
 	preamble []byte
 	slices   [][]byte
 
+	preambleUint   uint64
+	preambleMask   uint64
+	preambleSlices []uint64
+
 	preambleFinder *byteFinder
 
 	pkt []byte
@@ -143,10 +147,17 @@ func NewDecoder(cfg PacketConfig, decimation int) (d Decoder) {
 	// Pre-calculate a byte-slice version of the preamble for searching.
 	d.preamble = make([]byte, d.Cfg.PreambleSymbols)
 	for idx := range d.Cfg.Preamble {
+		d.preambleUint <<= 1
 		if d.Cfg.Preamble[idx] == '1' {
 			d.preamble[idx] = 1
+			d.preambleUint |= 1
 		}
 	}
+
+	d.preambleMask = 1<<uint(d.Cfg.PreambleSymbols) - 1
+	d.preambleSlices = make([]uint64, d.DecCfg.SymbolLength)
+
+	d.preambleFinder = makeByteFinder(d.preamble)
 
 	// Slice quantized sample buffer to make searching for the preamble more
 	// memory local.
@@ -186,6 +197,25 @@ func (d Decoder) Decode(input []byte) []int {
 
 	// Return a list of indexes the preamble exists at.
 	return d.Search()
+}
+
+// Decode accepts a sample block and performs various DSP techniques to extract a packet.
+func (d Decoder) DecodeUint(input []byte) []int {
+	// Shift buffers to append new block.
+	copy(d.Signal, d.Signal[d.DecCfg.BlockSize:])
+	copy(d.Quantized, d.Quantized[d.DecCfg.BlockSize:])
+
+	// Compute the magnitude of the new block.
+	d.demod.Execute(input, d.Signal[d.DecCfg.SymbolLength2:])
+
+	// Perform matched filter on new block.
+	d.Filter(d.Signal, d.Filtered)
+
+	// Perform bit-decision on new block.
+	Quantize(d.Filtered, d.Quantized[d.DecCfg.PacketLength-d.DecCfg.SymbolLength2:])
+
+	// Return a list of indexes the preamble exists at.
+	return d.SearchUint()
 }
 
 // A Demodulator knows how to demodulate an array of uint8 IQ samples into an
@@ -282,6 +312,20 @@ func (d *Decoder) Search() (indexes []int) {
 				offset += idx + 1
 			} else {
 				break
+			}
+		}
+	}
+
+	return
+}
+
+func (d *Decoder) SearchUint() (indexes []int) {
+	for sigIdx := 0; sigIdx < d.DecCfg.BlockSize+d.DecCfg.PreambleLength; sigIdx += d.DecCfg.SymbolLength {
+		slice := d.Quantized[sigIdx:]
+		for offsetIdx, preambleSlice := range d.preambleSlices {
+			preambleSlice = preambleSlice<<1 | uint64(slice[offsetIdx])
+			if preambleSlice&d.preambleMask == d.preambleUint {
+				indexes = append(indexes, sigIdx+offsetIdx)
 			}
 		}
 	}
