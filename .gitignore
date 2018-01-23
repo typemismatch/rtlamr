@@ -7,3 +7,4 @@ desktop.ini
 *~
 *.private.key
 *.certificate.crt
+.DS_Store
