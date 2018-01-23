@@ -29,7 +29,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-
+	"github.com/aws/aws-sdk-go/service/iot"
 	"github.com/bemasher/rtlamr/parse"
 	"github.com/bemasher/rtltcp"
 
