@@ -36,6 +36,7 @@ func init() {
 	parse.Register("scm", NewParser)
 }
 
+// NewTLSConfig Setup the TLS configuration
 func NewTLSConfig() *tls.Config {
 	// Import trusted certificates from CAfile.pem.
 	// Alternatively, manually add CA certificates to
@@ -190,26 +191,24 @@ func (scm SCM) Checksum() []byte {
 }
 
 func (scm SCM) String() string {
-	return fmt.Sprintf("{ID:%8d Type:%2d Tamper:{Phy:%02X Enc:%02X} Consumption:%8d CRC:0x%04X}",
-		scm.ID, scm.Type, scm.TamperPhy, scm.TamperEnc, scm.Consumption, scm.ChecksumVal,
-	)
-
 	// Setup the broker connection
 	tlsconfig := NewTLSConfig()
 
 	opts := MQTT.NewClientOptions()
 	opts.AddBroker("ssl://data.iot.us-west-2.amazonaws.com:8883")
 	opts.SetClientID("rtlsdr").SetTLSConfig(tlsconfig)
-	opts.SetDefaultPublishHandler(f)
 	c := MQTT.NewClient(opts)
 	if token := c.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
 	// write this message out to AWS IoT
-	c.Publish("/rtlsdr", 0, false, Sprintf("{ID:%8d Type:%2d Tamper:{Phy:%02X Enc:%02X} Consumption:%8d CRC:0x%04X}",
+	c.Publish("/rtlsdr", 0, false, fmt.Sprintf("{ID:%8d Type:%2d Tamper:{Phy:%02X Enc:%02X} Consumption:%8d CRC:0x%04X}",
 		scm.ID, scm.Type, scm.TamperPhy, scm.TamperEnc, scm.Consumption, scm.ChecksumVal,
 	))
-	c.Disconnect()
+	c.Disconnect(250)
+	return fmt.Sprintf("{ID:%8d Type:%2d Tamper:{Phy:%02X Enc:%02X} Consumption:%8d CRC:0x%04X}",
+		scm.ID, scm.Type, scm.TamperPhy, scm.TamperEnc, scm.Consumption, scm.ChecksumVal,
+	)
 }
 
 func (scm SCM) Record() (r []string) {
