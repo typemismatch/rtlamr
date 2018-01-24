@@ -18,6 +18,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -38,14 +40,66 @@ import (
 	_ "github.com/bemasher/rtlamr/r900bcd"
 	_ "github.com/bemasher/rtlamr/scm"
 	_ "github.com/bemasher/rtlamr/scmplus"
+	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
 var rcvr Receiver
+var c
+
+// NewTLSConfig Setup the TLS configuration
+func NewTLSConfig() *tls.Config {
+	// Import trusted certificates from CAfile.pem.
+	// Alternatively, manually add CA certificates to
+	// default openssl CA bundle.
+	certpool := x509.NewCertPool()
+	pemCerts, err := ioutil.ReadFile("rootCA.pem")
+	if err == nil {
+		certpool.AppendCertsFromPEM(pemCerts)
+	}
+
+	// Import client certificate/key pair
+	cert, err := tls.LoadX509KeyPair("rtlsdr.certificate.crt", "rtlsdr.private.key")
+	if err != nil {
+		panic(err)
+	}
+
+	// Just to print out the client certificate..
+	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(cert.Leaf)
+
+	// Create tls.Config with desired tls properties
+	return &tls.Config{
+		// RootCAs = certs used to verify server cert.
+		RootCAs: certpool,
+		// ClientAuth = whether to request cert from server.
+		// Since the server is set up for SSL, this happens
+		// anyways.
+		ClientAuth: tls.NoClientCert,
+		// ClientCAs = certs used to validate client cert.
+		ClientCAs: nil,
+		// InsecureSkipVerify = verify that cert contents
+		// match server. IP matches what is in cert etc.
+		InsecureSkipVerify: true,
+		// Certificates = list of certs client sends to server.
+		Certificates: []tls.Certificate{cert},
+	}
+}
 
 type Receiver struct {
 	rtltcp.SDR
 	p  parse.Parser
 	fc parse.FilterChain
+}
+
+func (msg) SendMQTTMessage() {
+
+	// write this message out to AWS IoT
+	c.Publish("/rtlsdr", 0, false, fmt.Sprintf("{ID:%8d Type:%2d Tamper:{Phy:%02X Enc:%02X} Consumption:%8d CRC:0x%04X}",
+		scm.ID, scm.Type, scm.TamperPhy, scm.TamperEnc, scm.Consumption, scm.ChecksumVal,
+	))
 }
 
 func (rcvr *Receiver) NewReceiver() {
@@ -213,6 +267,19 @@ func (rcvr *Receiver) Run() {
 
 func init() {
 	log.SetFlags(log.Lshortfile | log.Lmicroseconds)
+	fmt.Println("Opening AWS IoT Connection")
+	// Setup the IoT connection
+	tlsconfig := NewTLSConfig()
+
+	opts := MQTT.NewClientOptions()
+	opts.AddBroker("ssl://data.iot.us-west-2.amazonaws.com:8883")
+	opts.SetClientID("rtlsdr").SetTLSConfig(tlsconfig)
+	c := MQTT.NewClient(opts)
+	if token := c.Connect(); token.Wait() && token.Error() != nil {
+		panic(token.Error())
+	}
+	fmt.Println("Connected to AWS IoT")
+	fmt.Println()
 }
 
 var (
