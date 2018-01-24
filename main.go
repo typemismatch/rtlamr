@@ -95,9 +95,9 @@ type Receiver struct {
 	fc parse.FilterChain
 }
 
-func (LogMessage *msg) SendMQTTMessage() {
+func SendMQTTMessage(msg string) {
 	// write this message out to AWS IoT
-	c.Publish("/rtlsdr", 0, false, msg.Message)
+	c.Publish("/rtlsdr", 0, false, msg)
 }
 
 func (rcvr *Receiver) NewReceiver() {
@@ -230,6 +230,7 @@ func (rcvr *Receiver) Run() {
 
 				err := encoder.Encode(msg)
 				// Send this msg to our MQTT broker
+				SendMQTTMessage(msg.String())
 
 				if err != nil {
 					log.Fatal("Error encoding message: ", err)
