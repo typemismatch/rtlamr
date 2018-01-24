@@ -40,11 +40,12 @@ import (
 	_ "github.com/bemasher/rtlamr/r900bcd"
 	_ "github.com/bemasher/rtlamr/scm"
 	_ "github.com/bemasher/rtlamr/scmplus"
+
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
 var rcvr Receiver
-var c
+var c MQTT.Client
 
 // NewTLSConfig Setup the TLS configuration
 func NewTLSConfig() *tls.Config {
@@ -94,12 +95,9 @@ type Receiver struct {
 	fc parse.FilterChain
 }
 
-func (msg) SendMQTTMessage() {
-
+func (LogMessage *msg) SendMQTTMessage() {
 	// write this message out to AWS IoT
-	c.Publish("/rtlsdr", 0, false, fmt.Sprintf("{ID:%8d Type:%2d Tamper:{Phy:%02X Enc:%02X} Consumption:%8d CRC:0x%04X}",
-		scm.ID, scm.Type, scm.TamperPhy, scm.TamperEnc, scm.Consumption, scm.ChecksumVal,
-	))
+	c.Publish("/rtlsdr", 0, false, msg.Message)
 }
 
 func (rcvr *Receiver) NewReceiver() {
@@ -231,6 +229,8 @@ func (rcvr *Receiver) Run() {
 				msg.Message = pkt
 
 				err := encoder.Encode(msg)
+				// Send this msg to our MQTT broker
+
 				if err != nil {
 					log.Fatal("Error encoding message: ", err)
 				}
