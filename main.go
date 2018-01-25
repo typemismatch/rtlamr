@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -223,7 +224,9 @@ func (rcvr *Receiver) Run() {
 
 				err := encoder.Encode(msg)
 				// Send this msg to our MQTT broker
-				SendMQTTMessage("/rtlsdr", msg.String())
+				// Encode as a valid JSON object
+				jsonData, err := json.Marshal(msg)
+				SendMQTTMessage("/rtlsdr", string(jsonData[:]))
 
 				if err != nil {
 					log.Fatal("Error encoding message: ", err)
