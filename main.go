@@ -64,13 +64,6 @@ func NewTLSConfig() *tls.Config {
 		panic(err)
 	}
 
-	// Just to print out the client certificate..
-	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(cert.Leaf)
-
 	// Create tls.Config with desired tls properties
 	return &tls.Config{
 		// RootCAs = certs used to verify server cert.
@@ -95,9 +88,9 @@ type Receiver struct {
 	fc parse.FilterChain
 }
 
-func SendMQTTMessage(msg string) {
+func SendMQTTMessage(topic string, msg string) {
 	// write this message out to AWS IoT
-	c.Publish("/rtlsdr", 0, false, msg)
+	c.Publish(topic, 0, false, msg)
 }
 
 func (rcvr *Receiver) NewReceiver() {
@@ -230,7 +223,7 @@ func (rcvr *Receiver) Run() {
 
 				err := encoder.Encode(msg)
 				// Send this msg to our MQTT broker
-				SendMQTTMessage(msg.String())
+				SendMQTTMessage("/rtlsdr", msg.String())
 
 				if err != nil {
 					log.Fatal("Error encoding message: ", err)
@@ -275,11 +268,12 @@ func init() {
 	opts := MQTT.NewClientOptions()
 	opts.AddBroker("ssl://data.iot.us-west-2.amazonaws.com:8883")
 	opts.SetClientID("rtlsdr").SetTLSConfig(tlsconfig)
-	c := MQTT.NewClient(opts)
+	c = MQTT.NewClient(opts)
 	if token := c.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
 	fmt.Println("Connected to AWS IoT")
+	SendMQTTMessage("/rtlsdr-status", "online")
 	fmt.Println()
 }
 
