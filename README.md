@@ -1,3 +1,6 @@
+### Note - This Fork modifies the core functionality to now work with AWS IoT.
+You will need to setup a thing certificate and private key and possible modify your IoT end-point in main.go.
+Using AWS Analytics you can now graph your incoming data. 
 ### Purpose
 Utilities often use "smart meters" to optimize their residential meter reading infrastructure. Smart meters transmit consumption information in the various ISM bands allowing utilities to simply send readers driving through neighborhoods to collect commodity consumption information. One protocol in particular: Encoder Receiver Transmitter by Itron is fairly straight forward to decode and operates in the 900MHz ISM band, well within the tunable range of inexpensive rtl-sdr dongles.
 
