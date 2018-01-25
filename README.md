@@ -26,7 +26,7 @@ This project requires the package [`github.com/bemasher/rtltcp`](http://godoc.or
 This will install a binary in your $HOME/go/bin folder however you will need to first provide certificate information. Instead of running
 that binary do the following:
 
-cd /src/github.com/typemismatch/rtlamr
+cd $GOHOME/src/github.com/typemismatch/rtlamr
 
 You will see a rootCA.pem file required for connecting to AWS IoT.
 Create a new thing and save your certificate and private key file here as
@@ -48,7 +48,7 @@ You should have MQTT messages streaming to AWS IoT.
 ### AWS IoT Analytics
 You will need to have access to this service which is currently in preview.
 
-The dafault topic that we'll be capturing data on is /rtlsdr.
+The dafault topic that we'll be capturing data on is `/rtlsdr`.
 
 Follow these steps to get started:
 
