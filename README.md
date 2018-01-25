@@ -1,6 +1,7 @@
 ### Note - This Fork modifies the core functionality to now work with AWS IoT.
-You will need to setup a thing certificate and private key and possible modify your IoT end-point in main.go.
-Using AWS Analytics you can now graph your incoming data. 
+### AWS IoT Usage
+You will need to setup a thing certificate and private key for this to run.
+Using AWS Analytics you can now graph your incoming data. Details below.
 ### Purpose
 Utilities often use "smart meters" to optimize their residential meter reading infrastructure. Smart meters transmit consumption information in the various ISM bands allowing utilities to simply send readers driving through neighborhoods to collect commodity consumption information. One protocol in particular: Encoder Receiver Transmitter by Itron is fairly straight forward to decode and operates in the 900MHz ISM band, well within the tunable range of inexpensive rtl-sdr dongles.
 
@@ -20,9 +21,47 @@ There's now experimental support for data collection and aggregation with [rtlam
 ### Building
 This project requires the package [`github.com/bemasher/rtltcp`](http://godoc.org/github.com/bemasher/rtltcp), which provides a means of controlling and sampling from rtl-sdr dongles via the `rtl_tcp` tool. This package will be automatically downloaded and installed when getting rtlamr. The following command should be all that is required to install rtlamr.
 
-	go get github.com/bemasher/rtlamr
+	go get github.com/typemismatch/rtlamr
 
-This will produce the binary `$GOPATH/bin/rtlamr`. For convenience it's common to add `$GOPATH/bin` to the path.
+This will install a binary in your $HOME/go/bin folder however you will need to first provide certificate information. Instead of running
+that binary do the following:
+
+cd /src/github.com/typemismatch/rtlamr
+
+You will see a rootCA.pem file required for connecting to AWS IoT.
+Create a new thing and save your certificate and private key file here as
+
+* rtlsdr.certificate.crt
+* rtlsdr.private.key
+
+The default region is us-west-2, you can change this in main.go to match the region your certificate is created in.
+
+Finally do
+```bash
+go build
+```
+
+./rtlamr
+
+You should have MQTT messages streaming to AWS IoT.
+
+### AWS IoT Analytics
+You will need to have access to this service which is currently in preview.
+
+The dafault topic that we'll be capturing data on is /rtlsdr.
+
+Follow these steps to get started:
+
+* Setup a new channel in Analytics with a topic filter for `/rtlsdr`
+* Setup a new datastore in Analytics.
+* Setup a new pipeline and use the rtlsdr_model.json file under /models to select message attributes.
+* Select a pipeline action to select the fields you want and pass through.
+* Setup a new dataset doing a select * from your new datastore and setup a 1 hour cron job.
+* Setup a rule in AWS IoT to send messages from /rtlsdr to your channel in Analytics.
+* We will need to timestamp our messages for QuickSight, your rule query statement needs to be `SELECT *, parse_time("yyyy-MM-dd'T'HH:mm:ss.SSSZ", timestamp()) as RealTime FROM '/rtlsdr'`
+* Back in Analytics, select your dataset, select Action and Run Query Now.
+
+You can now go to QuickSight and query your dataset. Make sure your QuickSite is in the same region as your Analytics.
 
 ### Usage
 Available command-line flags are as follows:
